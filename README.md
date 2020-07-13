@@ -17,10 +17,11 @@ Installation: (assuming Python 3.8 is already installed)
 
 - Clone the repo
 - create a data folder in the repo folder
-- Create a config.py file and update it as you wish.
+- Create a config.py file and update it as you wish. Make sure you change ADMIN_EMAILID.
 
 ```
 class Config(object):
+    ADMIN_EMAILID='you@example.com'
     SQLALCHEMY_DATABASE_URI = 'sqlite:///data/secret.db'
     SQLALCHEMY_TRACK_MODIFICATIONS=False
     SECRET_KEY='-- put your application secret key here --'
@@ -52,6 +53,5 @@ python run_me_only_once.py
 
 - The encryption will be stored in data/secret.key, backup this file and protect it.
 - Run the application: `python main.py runserver`
-- Register (Before you may want to change the email id in the function db_add_user in main.py.
-The email id is automatically registered. Otherwise you will have to update the DB manually... kind of dumb, I know.)
+- Register with the email id you put in the config.py. It will be self-activated. Any other will not be.
 

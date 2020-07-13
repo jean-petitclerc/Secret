@@ -214,8 +214,10 @@ def list_users():
     if not logged_in():
         return redirect(url_for('login'))
     try:
+        user_id = session.get('user_id')
+        admin_user = AppUser.query.filter_by(user_id=user_id, user_email=app.config.get('ADMIN_EMAILID')).first()
         app_users = AppUser.query.order_by(AppUser.first_name).all()
-        return render_template('list_users.html', app_users=app_users)
+        return render_template('list_users.html', app_users=app_users, admin_user=admin_user)
     except Exception as e:
         app.logger.error('Error: ' + str(e))
         return redirect(url_for('index'))
@@ -225,11 +227,43 @@ def list_users():
 def act_user(user_id):
     if not logged_in():
         return redirect(url_for('login'))
-    if db_act_user(user_id):
+    if db_upd_user_status(user_id, 'A'):
         flash("L'utilisateur est activé.")
     else:
         flash("Quelque chose n'a pas fonctionné.")
     return redirect(url_for('list_users'))
+
+
+@app.route('/inact_user/<int:user_id>', methods=['GET', 'POST'])
+def inact_user(user_id):
+    if not logged_in():
+        return redirect(url_for('login'))
+    if db_upd_user_status(user_id, 'D'):
+        flash("L'utilisateur est désactivé.")
+    else:
+        flash("Quelque chose n'a pas fonctionné.")
+    return redirect(url_for('list_users'))
+
+
+@app.route('/del_user/<int:user_id>', methods=['GET', 'POST'])
+def del_user(user_id):
+    if not logged_in():
+        return redirect(url_for('login'))
+    form = DelEntityForm()
+    if form.validate_on_submit():
+        app.logger.debug('Deleting a user')
+        if db_del_user(user_id):
+            flash("L'utilisateur a été effacé.")
+        else:
+            flash("Quelque chose n'a pas fonctionné.")
+        return redirect(url_for('list_users'))
+    else:
+        user = db_user_by_id(user_id)
+        if user:
+            return render_template('del_user.html', form=form, user=user)
+        else:
+            flash("L'information n'a pas pu être retrouvée.")
+            return redirect(url_for('list_users'))
 
 
 # Views for Lists of Tasks
@@ -365,7 +399,7 @@ def db_add_user(first_name, last_name, user_email, user_pass):
     audit_crt_ts = datetime.now()
     try:
         user = AppUser(first_name, last_name, user_email, user_pass, audit_crt_ts)
-        if user_email == "jean.petitclerc@groupepp.com":
+        if user_email == app.config.get('ADMIN_EMAILID'):
             user.activated_ts = datetime.now()
         db.session.add(user)
         db.session.commit()
@@ -375,10 +409,13 @@ def db_add_user(first_name, last_name, user_email, user_pass):
         return False
 
 
-def db_act_user(user_id):
+def db_upd_user_status(user_id, status):
     try:
         user = AppUser.query.get(user_id)
-        user.activated_ts = datetime.now()
+        if status == 'A':
+            user.activated_ts = datetime.now()
+        else:
+            user.activated_ts = None
         db.session.commit()
         return True
     except Exception as e:
@@ -451,6 +488,19 @@ def db_validate_user(user_email, password):
         app.logger.error('Error: ' + str(e))
         flash("Connection impossible. Une erreur interne s'est produite.")
         return False
+
+
+def db_del_user(user_id):
+    try:
+        user = AppUser.query.get(user_id)
+        for secret in user.secrets:
+            db.session.delete(secret)
+        db.session.delete(user)
+        db.session.commit()
+    except Exception as e:
+        app.logger.error('Error: ' + str(e))
+        return False
+    return True
 
 
 # DB functions for TaskList: exists, by_id, add, upd, del, others
