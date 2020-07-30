@@ -2,33 +2,40 @@
 {% block page_content %}
 <div class="container">
     <div class="page-header">
-        <h1>Listes des Notes</h1>
+        <h1>Listes des Serveurs</h1>
     </div>
     <p>
-        {% if secrets %}
+        {% if servers %}
         <table class="table table-bordered">
             <thead>
                 <tr>
-                    <th>Non de la note</th>
+                    <th>Non du serveur</th>
                     <th class="text-center">Modifier</th>
                     <th class="text-center">Supprimer</th>
+                    <th class="text-center">Comptes</th>
                 </tr>
             </thead>
             <tbody>
-                {% for secret in secrets %}
+                {% for server in servers %}
                     <tr>
-                        <td><a href="{{ url_for('show_secret', secret_id=secret['secret_id']) }}">
-                            {{ secret['secret_name'] }}</a></td>
+                        <td><a href="{{ url_for('show_server', srvr_id=server['srvr_id']) }}">
+                            {{ server['srvr_name'] }}</a></td>
                         <td class="text-center">
-                            <a href="{{ url_for('upd_secret', secret_id=secret['secret_id']) }}"
+                            <a href="{{ url_for('upd_server', srvr_id=server['srvr_id']) }}"
                                class="btn btn-primary btn-xs" data-title="Modifier">
                                <span class="glyphicon glyphicon-pencil"></span>
                             </a>
                         </td>
                         <td class="text-center">
-                            <a href="{{ url_for('del_secret', secret_id=secret['secret_id']) }}"
+                            <a href="{{ url_for('del_server', srvr_id=server['srvr_id']) }}"
                                class="btn btn-danger btn-xs" data-title="Supprimer">
                                <span class="glyphicon glyphicon-trash"></span>
+                            </a>
+                        </td>
+                        <td class="text-center">
+                            <a href="{{ url_for('list_srvr_accts', srvr_id=server['srvr_id']) }}"
+                               class="btn btn-warning btn-xs" data-title="Comptes">
+                               <span class="glyphicon glyphicon-user"></span>
                             </a>
                         </td>
                     </tr>
@@ -36,11 +43,11 @@
             </tbody>
         </table>
         {% else %}
-            <em>Il n'y a pas de note dans la base de données</em>
+            <em>Il n'y a pas de serveur dans la base de données</em>
         {% endif %}
     </p>
     <p>
-        <a href="{{ url_for('add_secret') }}" class="btn btn-default">Ajouter une note</a>
+        <a href="{{ url_for('add_server') }}" class="btn btn-default">Ajouter un serveur</a>
         <a href="{{ url_for('index') }}" class="btn btn-default">Retour</a>
     </p>
 </div>

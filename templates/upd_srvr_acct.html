@@ -18,20 +18,23 @@
 {% block page_content %}
 <div class="container">
     <div class="page-header">
-        <h1>Modifier une Note</h1>
+        <h1>Modifier un Compte sur {{ server.srvr_name }}</h1>
     </div>
 
     <form class="form" method="post" role="form">
         {{ form.hidden_tag() }}
         {{ wtf.form_errors(form, hiddens="only") }}
         <div class="form-group ">
-            {{ render_field(form.secret_name, class="form-control") }}
+            {{ render_field(form.account_name, class="form-control") }}
         </div>
         <div class="form-group ">
-            {{ render_field(form.secret_text, class="form-control") }}
+            {{ render_field(form.account_pass, class="form-control") }}
+        </div>
+        <div class="form-group ">
+            {{ render_field(form.account_desc, class="form-control") }}
         </div>
         <input class="btn btn-default" id="submit" name="submit" type="submit" value="Modifier">
-        <a href="{{ url_for('list_secrets') }}" class="btn btn-default">Annuler</a>
+        <a href="{{ url_for('list_srvr_accts', srvr_id=server.srvr_id) }}" class="btn btn-default">Annuler</a>
     </form>
 
 </div>

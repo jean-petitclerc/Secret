@@ -51,8 +51,10 @@ class AppUser(db.Model):
     activated_ts = db.Column(db.DateTime(), nullable=True)
     audit_crt_ts = db.Column(db.DateTime(), nullable=False)
     audit_upd_ts = db.Column(db.DateTime(), nullable=True)
-    user_role = db.Column(db.String(10), nullable=False, default='Regular')  # Admin or Regular
+    user_role = db.Column(db.String(10), nullable=False, default='Régulier')  # Admin or Régulier
     secrets = db.relationship('Secret', backref='tapp_user', lazy='dynamic')
+    servers = db.relationship('Server', backref='tapp_user', lazy='dynamic')
+    #srv_usrs = db.relationship('ServerUser', backref='tapp_user', lazy='dynamic')
 
     def __init__(self, first_name, last_name, user_email, user_pass, audit_crt_ts):
         self.first_name = first_name
@@ -82,6 +84,43 @@ class Secret(db.Model):
 
     def __repr__(self):
         return '<secret: {}:{}>'.format(self.secret_id, self.secret_name)
+
+
+class Server(db.Model):
+    __tablename__ = 'tserver'
+    srvr_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('tapp_user.user_id'))
+    srvr_name = db.Column(db.String(16), nullable=False)
+    srvr_fqn = db.Column(db.String(64), nullable=True)
+    srvr_desc = db.Column(db.Text(), nullable=True)
+    srvr_accounts = db.relationship('ServerAccount', backref='tapp_user', lazy='dynamic')
+
+    def __init__(self, user_id, srvr_name, srvr_fqn, srvr_desc):
+        self.user_id = user_id
+        self.srvr_name = srvr_name
+        self.srvr_fqn = srvr_fqn
+        self.srvr_desc = srvr_desc
+
+    def __repr__(self):
+        return '<server: {}:{}>'.format(self.srvr_id, self.srvr_name)
+
+
+class ServerAccount(db.Model):
+    __tablename__ = 'tserver_account'
+    srvr_acct_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    srvr_id = db.Column(db.Integer, db.ForeignKey('tserver.srvr_id'))
+    account_name = db.Column(db.String(32), nullable=False)
+    account_pass = db.Column(db.Text(), nullable=False, default='')
+    account_desc = db.Column(db.Text(), nullable=True)
+
+    def __init__(self, srvr_id, account_name, account_pass, account_desc):
+        self.srvr_id = srvr_id
+        self.account_name = account_name
+        self.account_pass = account_pass
+        self.account_desc = account_desc
+
+    def __repr__(self):
+        return '<server-user: {}:{}>'.format(self.srvusr_id, self.account_name)
 
 
 # Classes pour définir les formulaires WTF
@@ -115,17 +154,49 @@ class RegisterForm(FlaskForm):
     submit = SubmitField('S\'enrégistrer')
 
 
-# Formulaires pour ajouter une liste de tâches
+# Formulaires pour ajouter un secret
 class AddSecretForm(FlaskForm):
-    secret_name = StringField('Nom du secret', validators=[DataRequired(message='Le nom est requis.')])
-    secret_text = TextAreaField('Texte secret')
+    secret_name = StringField('Nom de la note', validators=[DataRequired(message='Le nom est requis.')])
+    secret_text = TextAreaField('Texte')
     submit = SubmitField('Ajouter')
 
 
-# Formulaire de la mise à jour d'une liste de tâches
+# Formulaire de la mise à jour d'un secret
 class UpdSecretForm(FlaskForm):
-    secret_name = StringField('Nom du secret', validators=[DataRequired(message='Le nom est requis.')])
-    secret_text = TextAreaField('Texte secret')
+    secret_name = StringField('Nom de la note', validators=[DataRequired(message='Le nom est requis.')])
+    secret_text = TextAreaField('Texte')
+    submit = SubmitField('Modifier')
+
+
+# Formulaires pour ajouter un serveur
+class AddServerForm(FlaskForm):
+    srvr_name = StringField('Nom du serveur', validators=[DataRequired(message='Le nom est requis.')])
+    srvr_fqn = StringField('Fully Qualified Name')
+    srvr_desc = TextAreaField('Description')
+    submit = SubmitField('Ajouter')
+
+
+# Formulaire de la mise à jour d'un serveur
+class UpdServerForm(FlaskForm):
+    srvr_name = StringField('Nom du serveur', validators=[DataRequired(message='Le nom est requis.')])
+    srvr_fqn = StringField('Fully Qualified Name')
+    srvr_desc = TextAreaField('Description')
+    submit = SubmitField('Modifier')
+
+
+# Formulaires pour ajouter un compte sur serveur
+class AddSrvrAcctForm(FlaskForm):
+    account_name = StringField('Nom du compte', validators=[DataRequired(message='Le nom est requis.')])
+    account_pass = StringField('Mot de passe', [DataRequired(message='Le mot de passe est obligatoire.')])
+    account_desc = TextAreaField('Description')
+    submit = SubmitField('Ajouter')
+
+
+# Formulaire de la mise à jour d'un compte sur serveur
+class UpdSrvrAcctForm(FlaskForm):
+    account_name = StringField('Nom du compte', validators=[DataRequired(message='Le nom est requis.')])
+    account_pass = StringField('Mot de passe', [DataRequired(message='Le mot de passe est obligatoire.')])
+    account_desc = TextAreaField('Description')
     submit = SubmitField('Modifier')
 
 
@@ -354,11 +425,11 @@ def add_secret():
         secret_text = request.form['secret_text']
         user_id = session.get('user_id')
         if db_secret_exists(user_id, secret_name):
-            flash('Ce nom de secret existe déjà. Veuillez en choisir un autre.')
+            flash('Ce nom de note existe déjà. Veuillez en choisir un autre.')
             return render_template('add_secret.html', form=form)
         else:
             if db_add_secret(user_id, secret_name, secret_text):
-                flash('Le nouveau est ajouté.')
+                flash('La nouvelle note est ajoutée.')
                 return redirect(url_for('list_secrets'))
             else:
                 flash('Une erreur de base de données est survenue.')
@@ -382,10 +453,10 @@ def upd_secret(secret_id):
         secret_name = form.secret_name.data
         secret_text = form.secret_text.data
         if (secret_name != save_secret_name) and db_secret_exists(user_id, secret_name):
-            flash('Ce nom de secret existe déjà. Veuillez en choisir un autre.')
+            flash('Ce nom de note existe déjà. Veuillez en choisir un autre.')
             return render_template("upd_secret.html", form=form, secret=secret)
         if db_upd_secret(secret_id, secret_name, secret_text):
-            flash("Le secret a été modifié.")
+            flash("La note a été modifiée.")
         else:
             flash("Quelque chose n'a pas fonctionné.")
         return redirect(url_for('list_secrets'))
@@ -404,7 +475,7 @@ def del_secret(secret_id):
     if form.validate_on_submit():
         app.logger.debug('Deleting a secret')
         if db_del_secret(secret_id):
-            flash("Le secret a été effacé.")
+            flash("La note a été effacée.")
         else:
             flash("Quelque chose n'a pas fonctionné.")
         return redirect(url_for('list_secrets'))
@@ -415,6 +486,242 @@ def del_secret(secret_id):
         else:
             flash("L'information n'a pas pu être retrouvée.")
             return redirect(url_for('list_secrets'))
+
+
+@app.route('/list_servers')
+def list_servers():
+    if not logged_in():
+        return redirect(url_for('login'))
+    try:
+        user_id = session.get('user_id')
+        servers = Server.query.filter_by(user_id=user_id).order_by(Server.srvr_name).all()
+        return render_template('list_servers.html', servers=servers)
+    except Exception as e:
+        flash("Quelque chose n'a pas fonctionné.")
+        app.logger.error('Error: ' + str(e))
+        abort(500)
+
+
+@app.route('/show_server/<int:srvr_id>')
+def show_server(srvr_id):
+    if not logged_in():
+        return redirect(url_for('login'))
+    try:
+        user_id = session.get('user_id')
+        server = db_server_by_id(user_id, srvr_id)
+        if server:
+            return render_template("show_server.html", server=server)
+        else:
+            flash("L'information n'a pas pu être retrouvée.")
+            return redirect(url_for('list_servers'))
+    except Exception as e:
+        flash("Quelque chose n'a pas fonctionné.")
+        app.logger.error('Error: ' + str(e))
+        abort(500)
+
+
+@app.route('/add_server', methods=['GET', 'POST'])
+def add_server():
+    if not logged_in():
+        return redirect(url_for('login'))
+    app.logger.debug('Entering add_server')
+    form = AddServerForm()
+    if form.validate_on_submit():
+        app.logger.debug('Inserting a new server')
+        srvr_name = request.form['srvr_name']
+        srvr_fqn = request.form['srvr_fqn']
+        srvr_desc = request.form['srvr_desc']
+        user_id = session.get('user_id')
+        if db_server_exists(user_id, srvr_name):
+            flash('Ce nom de serveur existe déjà. Veuillez en choisir un autre.')
+            return render_template('add_server.html', form=form)
+        else:
+            if db_add_server(user_id, srvr_name, srvr_fqn, srvr_desc):
+                flash('Le nouveau serveur est ajouté.')
+                return redirect(url_for('list_servers'))
+            else:
+                flash('Une erreur de base de données est survenue.')
+                abort(500)
+    return render_template('add_server.html', form=form)
+
+
+@app.route('/upd_server/<int:srvr_id>', methods=['GET', 'POST'])
+def upd_server(srvr_id):
+    if not logged_in():
+        return redirect(url_for('login'))
+    user_id = session.get('user_id')
+    server = db_server_by_id(user_id, srvr_id)
+    if server is None:
+        flash("L'information n'a pas pu être retrouvée.")
+        return redirect(url_for('list_servers'))
+    form = UpdServerForm()
+    if form.validate_on_submit():
+        app.logger.debug('Updating a server')
+        save_srvr_name = server.srvr_name
+        srvr_name = form.srvr_name.data
+        srvr_fqn = form.srvr_fqn.data
+        srvr_desc = form.srvr_desc.data
+        if (srvr_name != save_srvr_name) and db_server_exists(user_id, srvr_name):
+            flash('Ce nom de serveur existe déjà. Veuillez en choisir un autre.')
+            return render_template("upd_server.html", form=form, server=server)
+        if db_upd_server(srvr_id, srvr_name, srvr_fqn, srvr_desc):
+            flash("Le serveur a été modifié.")
+        else:
+            flash("Quelque chose n'a pas fonctionné.")
+        return redirect(url_for('list_servers'))
+    else:
+        form.srvr_name.data = server.srvr_name
+        form.srvr_fqn.data = server.srvr_fqn
+        form.srvr_desc.data = server.srvr_desc
+        return render_template("upd_server.html", form=form, server=server)
+
+
+@app.route('/del_server/<int:srvr_id>', methods=['GET', 'POST'])
+def del_server(srvr_id):
+    if not logged_in():
+        return redirect(url_for('login'))
+    user_id = session.get('user_id')
+    form = DelEntityForm()
+    if form.validate_on_submit():
+        app.logger.debug('Deleting a server')
+        if db_del_server(srvr_id):
+            flash("Le serveur a été effacé.")
+        else:
+            flash("Quelque chose n'a pas fonctionné.")
+        return redirect(url_for('list_servers'))
+    else:
+        server = db_server_by_id(user_id, srvr_id)
+        if server:
+            return render_template('del_server.html', form=form, server=server)
+        else:
+            flash("L'information n'a pas pu être retrouvée.")
+            return redirect(url_for('list_servers'))
+
+
+@app.route('/list_srvr_accts/<int:srvr_id>')
+def list_srvr_accts(srvr_id):
+    if not logged_in():
+        return redirect(url_for('login'))
+    try:
+        user_id = session.get('user_id')
+        server = db_server_by_id(user_id, srvr_id)
+        if server:
+            session['srvr_id'] = srvr_id
+            srvr_accts = ServerAccount.query.filter_by(srvr_id=srvr_id).order_by(ServerAccount.account_name).all()
+            return render_template('list_srvr_accts.html', server=server, srvr_accts=srvr_accts)
+        else:
+            flash("L'information n'a pas pu être retrouvée.")
+            return redirect(url_for('list_servers'))
+    except Exception as e:
+        flash("Quelque chose n'a pas fonctionné.")
+        app.logger.error('Error: ' + str(e))
+        abort(500)
+
+
+@app.route('/show_srvr_acct/<int:srvr_acct_id>')
+def show_srvr_acct(srvr_acct_id):
+    if not logged_in():
+        return redirect(url_for('login'))
+    try:
+        user_id = session.get('user_id')
+        srvr_id = session.get('srvr_id')
+        srvr_acct = db_srvr_acct_by_id(srvr_acct_id)
+        if srvr_acct:
+            server = db_server_by_id(user_id, srvr_acct.srvr_id)
+            if server:
+                return render_template("show_srvr_acct.html", srvr_acct=srvr_acct, server=server)
+        flash("L'information n'a pas pu être retrouvée.")
+        return redirect(url_for('list_srvr_acct', srvr_id=srvr_id))
+    except Exception as e:
+        flash("Quelque chose n'a pas fonctionné.")
+        app.logger.error('Error: ' + str(e))
+        abort(500)
+
+
+@app.route('/add_srvr_acct', methods=['GET', 'POST'])
+def add_srvr_acct():
+    if not logged_in():
+        return redirect(url_for('login'))
+    srvr_id = session.get('srvr_id')
+    app.logger.debug('Entering add_srvr_acct')
+    form = AddSrvrAcctForm()
+    if form.validate_on_submit():
+        app.logger.debug('Inserting a new server')
+        account_name = request.form['account_name']
+        account_pass = request.form['account_pass']
+        account_desc = request.form['account_desc']
+        if db_srvr_acct_exists(srvr_id, account_name):
+            flash('Ce nom de compte existe déjà sur le serveur. Veuillez en choisir un autre.')
+            return render_template('add_srvr_acct.html', form=form, srvr_id=srvr_id)
+        else:
+            if db_add_srvr_acct(srvr_id, account_name, account_pass, account_desc):
+                flash('Le nouveau compte est ajouté.')
+                return redirect(url_for('list_srvr_accts', srvr_id=srvr_id))
+            else:
+                flash('Une erreur de base de données est survenue.')
+                abort(500)
+    return render_template('add_srvr_acct.html', form=form, srvr_id=srvr_id)
+
+
+@app.route('/upd_srvr_acct/<int:srvr_acct_id>', methods=['GET', 'POST'])
+def upd_srvr_acct(srvr_acct_id):
+    if not logged_in():
+        return redirect(url_for('login'))
+    user_id = session.get('user_id')
+    srvr_id = session.get('srvr_id')
+    srvr_acct = db_srvr_acct_by_id(srvr_acct_id)
+    if srvr_acct is None:
+        flash("L'information n'a pas pu être retrouvée.")
+        return redirect(url_for('list_srvr_accts', srvr_id=srvr_id))
+    # Get the parent server to validate that the server account belongs to the user
+    server = db_server_by_id(user_id, srvr_acct.srvr_id)
+    if server is None:
+        flash("L'information n'a pas pu être retrouvée.")
+        return redirect(url_for('list_srvr_accts', srvr_id=srvr_id))
+    form = UpdSrvrAcctForm()
+    if form.validate_on_submit():
+        app.logger.debug('Updating a server account')
+        save_account_name = srvr_acct.account_name
+        account_name = form.account_name.data
+        account_desc = form.account_desc.data
+        account_pass = form.account_pass.data
+        if (account_name != save_account_name) and db_srvr_acct_exists(srvr_id, account_name):
+            flash('Ce nom de compte existe déjà. Veuillez en choisir un autre.')
+            return render_template("upd_srvr_acct.html", form=form, server=server)
+        if db_upd_srvr_acct(srvr_acct_id, account_name, account_pass, account_desc):
+            flash("Le compte a été modifié.")
+        else:
+            flash("Quelque chose n'a pas fonctionné.")
+        return redirect(url_for('list_srvr_accts', srvr_id=srvr_id))
+    else:
+        form.account_name.data = srvr_acct.account_name
+        form.account_pass.data = srvr_acct.account_pass
+        form.account_desc.data = srvr_acct.account_desc
+        return render_template("upd_srvr_acct.html", form=form, server=server)
+
+
+@app.route('/del_srvr_acct/<int:srvr_acct_id>', methods=['GET', 'POST'])
+def del_srvr_acct(srvr_acct_id):
+    if not logged_in():
+        return redirect(url_for('login'))
+    user_id = session.get('user_id')
+    srvr_id = session.get('srvr_id')
+    form = DelEntityForm()
+    if form.validate_on_submit():
+        app.logger.debug('Deleting a srvr_account')
+        if db_del_srvr_acct(srvr_acct_id):
+            flash("Le compte a été effacé.")
+        else:
+            flash("Quelque chose n'a pas fonctionné.")
+        return redirect(url_for('list_srvr_accts', srvr_id=srvr_id))
+    else:
+        srvr_acct = db_srvr_acct_by_id(srvr_acct_id)
+        if srvr_acct:
+            server = db_server_by_id(user_id, srvr_acct.srvr_id)
+            if server:
+                return render_template('del_srvr_acct.html', form=form, srvr_acct=srvr_acct, server=server)
+        flash("L'information n'a pas pu être retrouvée.")
+        return redirect(url_for('list_srvr_accts', srvr_id=srvr_id))
 
 
 # Application functions
@@ -578,7 +885,7 @@ def db_del_user(user_id):
     return True
 
 
-# DB functions for TaskList: exists, by_id, add, upd, del, others
+# DB functions for Secret: exists, by_id, add, upd, del, others
 def db_secret_exists(user_id, secret_name):
     app.logger.debug('Entering secret_exists with: ' + secret_name)
     try:
@@ -633,6 +940,132 @@ def db_del_secret(secret_id):
     try:
         secret = Secret.query.get(secret_id)
         db.session.delete(secret)
+        db.session.commit()
+    except Exception as e:
+        app.logger.error('Error: ' + str(e))
+        return False
+    return True
+
+
+# DB functions for Server: exists, by_id, add, upd, del, others
+def db_server_exists(user_id, srvr_name):
+    app.logger.debug('Entering server_exists with: ' + srvr_name)
+    try:
+        server = Server.query.filter_by(user_id=user_id, srvr_name=srvr_name).first()
+        if server is None:
+            return False
+        else:
+            return True
+    except Exception as e:
+        app.logger.error('Error: ' + str(e))
+        return False
+
+
+def db_server_by_id(user_id, srvr_id):
+    try:
+        server = Server.query.filter_by(srvr_id=srvr_id, user_id=user_id).first()
+        if server:
+            return server
+        else:
+            return None
+    except Exception as e:
+        app.logger.error('Error: ' + str(e))
+        return None
+
+
+def db_add_server(user_id, srvr_name, srvr_fqn, srvr_desc):
+    server = Server(user_id, srvr_name, srvr_fqn, srvr_desc)
+    try:
+        db.session.add(server)
+        db.session.commit()
+    except Exception as e:
+        app.logger.error('Error: ' + str(e))
+        return False
+    return True
+
+
+def db_upd_server(srvr_id, srvr_name, srvr_fqn, srvr_desc):
+    try:
+        server = Server.query.get(srvr_id)
+        server.srvr_name = srvr_name
+        server.srvr_fqn = srvr_fqn
+        server.srvr_desc = srvr_desc
+        db.session.commit()
+    except Exception as e:
+        app.logger.error('Error: ' + str(e))
+        return False
+    return True
+
+
+def db_del_server(srvr_id):
+    try:
+        server = Server.query.get(srvr_id)
+        for srvr_acc in server.srvr_accounts:
+            db.session.delete(srvr_acc)
+        db.session.delete(server)
+        db.session.commit()
+    except Exception as e:
+        app.logger.error('Error: ' + str(e))
+        return False
+    return True
+
+
+# DB functions for ServerAccount: exists, by_id, add, upd, del, others
+def db_srvr_acct_exists(srvr_id, account_name):
+    app.logger.debug('Entering srvr_acct_exists with: ' + account_name)
+    try:
+        srvr_acct = ServerAccount.query.filter_by(srvr_id=srvr_id, account_name=account_name).first()
+        if srvr_acct is None:
+            return False
+        else:
+            return True
+    except Exception as e:
+        app.logger.error('Error: ' + str(e))
+        return False
+
+
+def db_srvr_acct_by_id(srvr_acct_id):
+    try:
+        srvr_acct = ServerAccount.query.filter_by(srvr_acct_id=srvr_acct_id).first()
+        if srvr_acct:
+            srvr_acct.account_pass = decrypt_message(srvr_acct.account_pass)
+            return srvr_acct
+        else:
+            return None
+    except Exception as e:
+        app.logger.error('Error: ' + str(e))
+        return None
+
+
+def db_add_srvr_acct(srvr_id, account_name, account_pass, account_desc):
+    account_pass = encrypt_message(account_pass)
+    srvr_acct = ServerAccount(srvr_id, account_name, account_pass, account_desc)
+    try:
+        db.session.add(srvr_acct)
+        db.session.commit()
+    except Exception as e:
+        app.logger.error('Error: ' + str(e))
+        return False
+    return True
+
+
+def db_upd_srvr_acct(srvr_acct_id, account_name, account_pass, account_desc):
+    try:
+        srvr_acct = ServerAccount.query.get(srvr_acct_id)
+        srvr_acct.account_name = account_name
+        srvr_acct.account_pass = encrypt_message(account_pass)
+        srvr_acct.account_desc = account_desc
+        db.session.commit()
+    except Exception as e:
+        app.logger.error('Error: ' + str(e))
+        return False
+    return True
+
+
+def db_del_srvr_acct(srvr_acct_id):
+    try:
+        srvr_acct = ServerAccount.query.get(srvr_acct_id)
+        db.session.delete(srvr_acct)
         db.session.commit()
     except Exception as e:
         app.logger.error('Error: ' + str(e))

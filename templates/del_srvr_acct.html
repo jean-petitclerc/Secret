@@ -4,21 +4,23 @@
 {% block page_content %}
 <div class="container">
     <div class="page-header">
-        <h1>Supprimer une Note</h1>
+        <h1>Supprimer un Serveur</h1>
     </div>
 
     <form class="form" method="post" role="form">
         {{ form.hidden_tag() }}
         {{ wtf.form_errors(form, hiddens="only") }}
         <h4>
-            <em>Voulez-vous vraiment supprimer cette note?</em>
+            <em>Voulez-vous vraiment supprimer ce compte?</em>
             <br>
             <br>
-            Secret: {{ secret.secret_name }}
+            Serveur: {{ server.srvr_name }}
+            <br>
+            Compte: {{ srvr_acct.account_name }}
         </h4>
         <p>&nbsp;</p>
         <input class="btn btn-default" id="submit" name="submit" type="submit" value="Supprimer">
-        <a href="{{ url_for('list_secrets') }}" class="btn btn-default">Annuler</a>
+        <a href="{{ url_for('list_srvr_accts', srvr_id=server.srvr_id) }}" class="btn btn-default">Annuler</a>
     </form>
 </div>
 {% endblock %}
