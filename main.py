@@ -37,7 +37,9 @@ app.config.from_object(Config)
 manager = Manager(app)
 bootstrap = Bootstrap(app)
 db = SQLAlchemy(app)
-
+dbms_choices = [('D', 'DB2 Unix'), ('L', 'SQLite'), ('M', 'MySQL'), ('O', 'Oracle'), ('P', 'Postgress'),
+                ('S', 'MS-SQL Server')]
+dbms  = {'D': 'DB2 Unix', 'L': 'SQLite', 'M': 'MySQL', 'O': 'Oracle', 'P': 'Postgress', 'S': 'MS-SQL Server'}
 
 # Database Model
 # ----------------------------------------------------------------------------------------------------------------------
@@ -52,9 +54,8 @@ class AppUser(db.Model):
     audit_crt_ts = db.Column(db.DateTime(), nullable=False)
     audit_upd_ts = db.Column(db.DateTime(), nullable=True)
     user_role = db.Column(db.String(10), nullable=False, default='Régulier')  # Admin or Régulier
-    secrets = db.relationship('Secret', backref='tapp_user', lazy='dynamic')
+    notes = db.relationship('Note', backref='tapp_user', lazy='dynamic')
     servers = db.relationship('Server', backref='tapp_user', lazy='dynamic')
-    #srv_usrs = db.relationship('ServerUser', backref='tapp_user', lazy='dynamic')
 
     def __init__(self, first_name, last_name, user_email, user_pass, audit_crt_ts):
         self.first_name = first_name
@@ -70,20 +71,20 @@ class AppUser(db.Model):
         return '{} {}'.format(self.first_name, self.last_name)
 
 
-class Secret(db.Model):
-    __tablename__ = 'tsecret'
-    secret_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+class Note(db.Model):
+    __tablename__ = 'tnote'
+    note_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(db.Integer, db.ForeignKey('tapp_user.user_id'))
-    secret_name = db.Column(db.String(50), nullable=False)
-    secret_text = db.Column(db.Text(), nullable=False, default='')
+    note_name = db.Column(db.String(50), nullable=False)
+    note_text = db.Column(db.Text(), nullable=False, default='')
 
-    def __init__(self, user_id, secret_name, secret_text):
+    def __init__(self, user_id, note_name, note_text):
         self.user_id = user_id
-        self.secret_name = secret_name
-        self.secret_text = secret_text
+        self.note_name = note_name
+        self.note_text = note_text
 
     def __repr__(self):
-        return '<secret: {}:{}>'.format(self.secret_id, self.secret_name)
+        return '<note: {}:{}>'.format(self.note_id, self.note_name)
 
 
 class Server(db.Model):
@@ -93,13 +94,16 @@ class Server(db.Model):
     srvr_name = db.Column(db.String(16), nullable=False)
     srvr_fqn = db.Column(db.String(64), nullable=True)
     srvr_desc = db.Column(db.Text(), nullable=True)
-    srvr_accounts = db.relationship('ServerAccount', backref='tapp_user', lazy='dynamic')
+    srvr_ipaddr = db.Column(db.String(15), nullable=True)
+    srvr_accounts = db.relationship('ServerAccount', backref='tserver', lazy='dynamic')
+    databases = db.relationship('Database', backref='tserver', lazy='dynamic')
 
-    def __init__(self, user_id, srvr_name, srvr_fqn, srvr_desc):
+    def __init__(self, user_id, srvr_name, srvr_fqn, srvr_desc, srvr_ipaddr):
         self.user_id = user_id
         self.srvr_name = srvr_name
         self.srvr_fqn = srvr_fqn
         self.srvr_desc = srvr_desc
+        self.srvr_ipaddr = srvr_ipaddr
 
     def __repr__(self):
         return '<server: {}:{}>'.format(self.srvr_id, self.srvr_name)
@@ -121,6 +125,44 @@ class ServerAccount(db.Model):
 
     def __repr__(self):
         return '<server-user: {}:{}>'.format(self.srvusr_id, self.account_name)
+
+
+class Database(db.Model):
+    __tablename__ = 'tdatabase'
+    db_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    srvr_id = db.Column(db.Integer, db.ForeignKey('tserver.srvr_id'))
+    db_name = db.Column(db.String(32), nullable=False)
+    db_desc = db.Column(db.Text(), nullable=True)
+    db_port = db.Column(db.Integer(), nullable=False)
+    dbms = db.Column(db.String(8), nullable=False)
+
+    def __init__(self, srvr_id, db_name, db_desc, db_port, dbms):
+        self.srvr_id = srvr_id
+        self.db_name = db_name
+        self.db_desc = db_desc
+        self.db_port = db_port
+        self.dbms = dbms
+
+    def __repr__(self):
+        return '<db: {}:{}>'.format(self.db_id, self.db_name)
+
+
+class DbAccount(db.Model):
+    __tablename__ = 'tdb_account'
+    db_acct_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    db_id = db.Column(db.Integer, db.ForeignKey('tserver.srvr_id'))
+    account_name = db.Column(db.String(32), nullable=False)
+    account_pass = db.Column(db.Text(), nullable=False, default='')
+    account_desc = db.Column(db.Text(), nullable=True)
+
+    def __init__(self, db_id, account_name, account_pass, account_desc):
+        self.db_id = db_id
+        self.account_name = account_name
+        self.account_pass = account_pass
+        self.account_desc = account_desc
+
+    def __repr__(self):
+        return '<db-user: {}:{}>'.format(self.db_id, self.account_name)
 
 
 # Classes pour définir les formulaires WTF
@@ -154,17 +196,17 @@ class RegisterForm(FlaskForm):
     submit = SubmitField('S\'enrégistrer')
 
 
-# Formulaires pour ajouter un secret
-class AddSecretForm(FlaskForm):
-    secret_name = StringField('Nom de la note', validators=[DataRequired(message='Le nom est requis.')])
-    secret_text = TextAreaField('Texte')
+# Formulaires pour ajouter une note
+class AddNoteForm(FlaskForm):
+    note_name = StringField('Nom de la note', validators=[DataRequired(message='Le nom est requis.')])
+    note_text = TextAreaField('Texte')
     submit = SubmitField('Ajouter')
 
 
-# Formulaire de la mise à jour d'un secret
-class UpdSecretForm(FlaskForm):
-    secret_name = StringField('Nom de la note', validators=[DataRequired(message='Le nom est requis.')])
-    secret_text = TextAreaField('Texte')
+# Formulaire de la mise à jour d'une note
+class UpdNoteForm(FlaskForm):
+    note_name = StringField('Nom de la note', validators=[DataRequired(message='Le nom est requis.')])
+    note_text = TextAreaField('Texte')
     submit = SubmitField('Modifier')
 
 
@@ -173,6 +215,7 @@ class AddServerForm(FlaskForm):
     srvr_name = StringField('Nom du serveur', validators=[DataRequired(message='Le nom est requis.')])
     srvr_fqn = StringField('Fully Qualified Name')
     srvr_desc = TextAreaField('Description')
+    srvr_ipaddr = StringField('Adresse IP')
     submit = SubmitField('Ajouter')
 
 
@@ -181,6 +224,7 @@ class UpdServerForm(FlaskForm):
     srvr_name = StringField('Nom du serveur', validators=[DataRequired(message='Le nom est requis.')])
     srvr_fqn = StringField('Fully Qualified Name')
     srvr_desc = TextAreaField('Description')
+    srvr_ipaddr = StringField('Adresse IP')
     submit = SubmitField('Modifier')
 
 
@@ -197,6 +241,27 @@ class UpdSrvrAcctForm(FlaskForm):
     account_name = StringField('Nom du compte', validators=[DataRequired(message='Le nom est requis.')])
     account_pass = StringField('Mot de passe', [DataRequired(message='Le mot de passe est obligatoire.')])
     account_desc = TextAreaField('Description')
+    submit = SubmitField('Modifier')
+
+
+# Formulaires pour ajouter une base de données
+class AddDatabaseForm(FlaskForm):
+    db_name = StringField('Nom de le base de données', validators=[DataRequired(message='Le nom est requis.')])
+    db_desc = TextAreaField('Description')
+    db_port = IntegerField('Port')
+    dbms = SelectField("Type de SGBD: ", choices=dbms_choices,
+                            validators=[DataRequired(message="Le type de SGBD doit être choisi.")],
+                            default=0, widget=Select())
+    submit = SubmitField('Ajouter')
+
+
+class UpdDatabaseForm(FlaskForm):
+    db_name = StringField('Nom de le base de données', validators=[DataRequired(message='Le nom est requis.')])
+    db_desc = TextAreaField('Description')
+    db_port = IntegerField('Port')
+    dbms = SelectField("Type de SGBD: ", choices=dbms_choices,
+                            validators=[DataRequired(message="Le type de SGBD doit être choisi.")],
+                            default=0, widget=Select())
     submit = SubmitField('Modifier')
 
 
@@ -381,111 +446,111 @@ def del_user(user_id):
 
 # Views for Lists of Tasks
 # Ordre des vues: list, show, add, upd, del
-@app.route('/list_secrets')
-def list_secrets():
+@app.route('/list_notes')
+def list_notes():
     if not logged_in():
         return redirect(url_for('login'))
     try:
         user_id = session.get('user_id')
-        secrets = Secret.query.filter_by(user_id=user_id).order_by(Secret.secret_name).all()
-        return render_template('list_secrets.html', secrets=secrets)
+        notes = Note.query.filter_by(user_id=user_id).order_by(Note.note_name).all()
+        return render_template('list_notes.html', notes=notes)
     except Exception as e:
         flash("Quelque chose n'a pas fonctionné.")
         app.logger.error('Error: ' + str(e))
         abort(500)
 
 
-@app.route('/show_secret/<int:secret_id>')
-def show_secret(secret_id):
+@app.route('/show_note/<int:note_id>')
+def show_note(note_id):
     if not logged_in():
         return redirect(url_for('login'))
     try:
         user_id = session.get('user_id')
-        secret = db_secret_by_id(user_id, secret_id)
-        if secret:
-            return render_template("show_secret.html", secret=secret)
+        note = db_note_by_id(user_id, note_id)
+        if note:
+            return render_template("show_note.html", note=note)
         else:
             flash("L'information n'a pas pu être retrouvée.")
-            return redirect(url_for('list_secrets'))
+            return redirect(url_for('list_notes'))
     except Exception as e:
         flash("Quelque chose n'a pas fonctionné.")
         app.logger.error('Error: ' + str(e))
         abort(500)
 
 
-@app.route('/add_secret', methods=['GET', 'POST'])
-def add_secret():
+@app.route('/add_note', methods=['GET', 'POST'])
+def add_note():
     if not logged_in():
         return redirect(url_for('login'))
-    app.logger.debug('Entering add_secret')
-    form = AddSecretForm()
+    app.logger.debug('Entering add_note')
+    form = AddNoteForm()
     if form.validate_on_submit():
-        app.logger.debug('Inserting a new secret')
-        secret_name = request.form['secret_name']
-        secret_text = request.form['secret_text']
+        app.logger.debug('Inserting a new note')
+        note_name = request.form['note_name']
+        note_text = request.form['note_text']
         user_id = session.get('user_id')
-        if db_secret_exists(user_id, secret_name):
+        if db_note_exists(user_id, note_name):
             flash('Ce nom de note existe déjà. Veuillez en choisir un autre.')
-            return render_template('add_secret.html', form=form)
+            return render_template('add_note.html', form=form)
         else:
-            if db_add_secret(user_id, secret_name, secret_text):
+            if db_add_note(user_id, note_name, note_text):
                 flash('La nouvelle note est ajoutée.')
-                return redirect(url_for('list_secrets'))
+                return redirect(url_for('list_notes'))
             else:
                 flash('Une erreur de base de données est survenue.')
                 abort(500)
-    return render_template('add_secret.html', form=form)
+    return render_template('add_note.html', form=form)
 
 
-@app.route('/upd_secret/<int:secret_id>', methods=['GET', 'POST'])
-def upd_secret(secret_id):
+@app.route('/upd_note/<int:note_id>', methods=['GET', 'POST'])
+def upd_note(note_id):
     if not logged_in():
         return redirect(url_for('login'))
     user_id = session.get('user_id')
-    secret = db_secret_by_id(user_id, secret_id)
-    if secret is None:
+    note = db_note_by_id(user_id, note_id)
+    if note is None:
         flash("L'information n'a pas pu être retrouvée.")
-        return redirect(url_for('list_secrets'))
-    form = UpdSecretForm()
+        return redirect(url_for('list_notes'))
+    form = UpdNoteForm()
     if form.validate_on_submit():
-        app.logger.debug('Updating a secret')
-        save_secret_name = secret.secret_name
-        secret_name = form.secret_name.data
-        secret_text = form.secret_text.data
-        if (secret_name != save_secret_name) and db_secret_exists(user_id, secret_name):
+        app.logger.debug('Updating a note')
+        save_note_name = note.note_name
+        note_name = form.note_name.data
+        note_text = form.note_text.data
+        if (note_name != save_note_name) and db_note_exists(user_id, note_name):
             flash('Ce nom de note existe déjà. Veuillez en choisir un autre.')
-            return render_template("upd_secret.html", form=form, secret=secret)
-        if db_upd_secret(secret_id, secret_name, secret_text):
+            return render_template("upd_note.html", form=form, note=note)
+        if db_upd_note(note_id, note_name, note_text):
             flash("La note a été modifiée.")
         else:
             flash("Quelque chose n'a pas fonctionné.")
-        return redirect(url_for('list_secrets'))
+        return redirect(url_for('list_notes'))
     else:
-        form.secret_name.data = secret.secret_name
-        form.secret_text.data = secret.secret_text
-        return render_template("upd_secret.html", form=form, secret=secret)
+        form.note_name.data = note.note_name
+        form.note_text.data = note.note_text
+        return render_template("upd_note.html", form=form, note=note)
 
 
-@app.route('/del_secret/<int:secret_id>', methods=['GET', 'POST'])
-def del_secret(secret_id):
+@app.route('/del_note/<int:note_id>', methods=['GET', 'POST'])
+def del_note(note_id):
     if not logged_in():
         return redirect(url_for('login'))
     user_id = session.get('user_id')
     form = DelEntityForm()
     if form.validate_on_submit():
-        app.logger.debug('Deleting a secret')
-        if db_del_secret(secret_id):
+        app.logger.debug('Deleting a note')
+        if db_del_note(note_id):
             flash("La note a été effacée.")
         else:
             flash("Quelque chose n'a pas fonctionné.")
-        return redirect(url_for('list_secrets'))
+        return redirect(url_for('list_notes'))
     else:
-        secret = db_secret_by_id(user_id, secret_id)
-        if secret:
-            return render_template('del_secret.html', form=form, secret=secret)
+        note = db_note_by_id(user_id, note_id)
+        if note:
+            return render_template('del_note.html', form=form, note=note)
         else:
             flash("L'information n'a pas pu être retrouvée.")
-            return redirect(url_for('list_secrets'))
+            return redirect(url_for('list_notes'))
 
 
 @app.route('/list_servers')
@@ -531,12 +596,13 @@ def add_server():
         srvr_name = request.form['srvr_name']
         srvr_fqn = request.form['srvr_fqn']
         srvr_desc = request.form['srvr_desc']
+        srvr_ipaddr = request.form['srvr_ipaddr']
         user_id = session.get('user_id')
         if db_server_exists(user_id, srvr_name):
             flash('Ce nom de serveur existe déjà. Veuillez en choisir un autre.')
             return render_template('add_server.html', form=form)
         else:
-            if db_add_server(user_id, srvr_name, srvr_fqn, srvr_desc):
+            if db_add_server(user_id, srvr_name, srvr_fqn, srvr_desc, srvr_ipaddr):
                 flash('Le nouveau serveur est ajouté.')
                 return redirect(url_for('list_servers'))
             else:
@@ -561,10 +627,11 @@ def upd_server(srvr_id):
         srvr_name = form.srvr_name.data
         srvr_fqn = form.srvr_fqn.data
         srvr_desc = form.srvr_desc.data
+        srvr_ipaddr = form.srvr_ipaddr.data
         if (srvr_name != save_srvr_name) and db_server_exists(user_id, srvr_name):
             flash('Ce nom de serveur existe déjà. Veuillez en choisir un autre.')
             return render_template("upd_server.html", form=form, server=server)
-        if db_upd_server(srvr_id, srvr_name, srvr_fqn, srvr_desc):
+        if db_upd_server(srvr_id, srvr_name, srvr_fqn, srvr_desc, srvr_ipaddr):
             flash("Le serveur a été modifié.")
         else:
             flash("Quelque chose n'a pas fonctionné.")
@@ -573,6 +640,7 @@ def upd_server(srvr_id):
         form.srvr_name.data = server.srvr_name
         form.srvr_fqn.data = server.srvr_fqn
         form.srvr_desc.data = server.srvr_desc
+        form.srvr_ipaddr.data = server.srvr_ipaddr
         return render_template("upd_server.html", form=form, server=server)
 
 
@@ -722,6 +790,135 @@ def del_srvr_acct(srvr_acct_id):
                 return render_template('del_srvr_acct.html', form=form, srvr_acct=srvr_acct, server=server)
         flash("L'information n'a pas pu être retrouvée.")
         return redirect(url_for('list_srvr_accts', srvr_id=srvr_id))
+
+
+@app.route('/list_databases/<int:srvr_id>')
+def list_databases(srvr_id):
+    if not logged_in():
+        return redirect(url_for('login'))
+    try:
+        user_id = session.get('user_id')
+        server = db_server_by_id(user_id, srvr_id)
+        if server:
+            session['srvr_id'] = srvr_id
+            databases = Database.query.filter_by(srvr_id=srvr_id).order_by(Database.db_name).all()
+            return render_template('list_databases.html', server=server, databases=databases)
+        else:
+            flash("L'information n'a pas pu être retrouvée.")
+            return redirect(url_for('list_servers'))
+    except Exception as e:
+        flash("Quelque chose n'a pas fonctionné.")
+        app.logger.error('Error: ' + str(e))
+        abort(500)
+
+
+@app.route('/show_database/<int:db_id>')
+def show_database(db_id):
+    if not logged_in():
+        return redirect(url_for('login'))
+    try:
+        user_id = session.get('user_id')
+        srvr_id = session.get('srvr_id')
+        database = db_database_by_id(db_id)
+        if database:
+            server = db_server_by_id(user_id, database.srvr_id)
+            if server:
+                return render_template("show_database.html", database=database, server=server, dbms=dbms)
+        flash("L'information n'a pas pu être retrouvée.")
+        return redirect(url_for('list_databases', srvr_id=srvr_id))
+    except Exception as e:
+        flash("Quelque chose n'a pas fonctionné.")
+        app.logger.error('Error: ' + str(e))
+        abort(500)
+
+
+@app.route('/add_database', methods=['GET', 'POST'])
+def add_database():
+    if not logged_in():
+        return redirect(url_for('login'))
+    srvr_id = session.get('srvr_id')
+    app.logger.debug('Entering add_database')
+    form = AddDatabaseForm()
+    if form.validate_on_submit():
+        app.logger.debug('Inserting a new db')
+        db_name = request.form['db_name']
+        db_desc = request.form['db_desc']
+        db_port = request.form['db_port']
+        dbms = request.form['dbms']
+        if db_database_exists(srvr_id, db_name):
+            flash('Ce nom de BD existe déjà sur le serveur. Veuillez en choisir un autre.')
+            return render_template('add_database.html', form=form, srvr_id=srvr_id)
+        else:
+            if db_add_database(srvr_id, db_name, db_desc, db_port, dbms):
+                flash('La nouvelle BD est ajoutée.')
+                return redirect(url_for('list_databases', srvr_id=srvr_id))
+            else:
+                flash('Une erreur de base de données est survenue.')
+                abort(500)
+    return render_template('add_database.html', form=form, srvr_id=srvr_id)
+
+
+@app.route('/upd_database/<int:db_id>', methods=['GET', 'POST'])
+def upd_database(db_id):
+    if not logged_in():
+        return redirect(url_for('login'))
+    user_id = session.get('user_id')
+    srvr_id = session.get('srvr_id')
+    database = db_database_by_id(db_id)
+    if database is None:
+        flash("L'information n'a pas pu être retrouvée.")
+        return redirect(url_for('list_databases', srvr_id=srvr_id))
+    # Get the parent server to validate that the server account belongs to the user
+    server = db_server_by_id(user_id, database.srvr_id)
+    if server is None:
+        flash("L'information n'a pas pu être retrouvée.")
+        return redirect(url_for('list_databases', srvr_id=srvr_id))
+    form = UpdDatabaseForm()
+    if form.validate_on_submit():
+        app.logger.debug('Updating a DB')
+        save_db_name = database.db_name
+        db_name = form.db_name.data
+        db_desc = form.db_desc.data
+        db_port = form.db_port.data
+        dbms = form.dbms.data
+        if (db_name != save_db_name) and db_database_exists(srvr_id, db_name):
+            flash('Ce nom de BD existe déjà. Veuillez en choisir un autre.')
+            return render_template("upd_database.html", form=form, server=server)
+        if db_upd_database(db_id, db_name, db_desc, db_port, dbms):
+            flash("La BD a été modifiée.")
+        else:
+            flash("Quelque chose n'a pas fonctionné.")
+        return redirect(url_for('list_databases', srvr_id=srvr_id))
+    else:
+        form.db_name.data = database.db_name
+        form.db_desc.data = database.db_desc
+        form.db_port.data = database.db_port
+        form.dbms.data = database.dbms
+        return render_template("upd_database.html", form=form, server=server)
+
+
+@app.route('/del_database/<int:db_id>', methods=['GET', 'POST'])
+def del_database(db_id):
+    if not logged_in():
+        return redirect(url_for('login'))
+    user_id = session.get('user_id')
+    srvr_id = session.get('srvr_id')
+    form = DelEntityForm()
+    if form.validate_on_submit():
+        app.logger.debug('Deleting a database')
+        if db_del_database(db_id):
+            flash("La BD a été effacée.")
+        else:
+            flash("Quelque chose n'a pas fonctionné.")
+        return redirect(url_for('list_databases', srvr_id=srvr_id))
+    else:
+        database = db_database_by_id(db_id)
+        if database:
+            server = db_server_by_id(user_id, database.srvr_id)
+            if server:
+                return render_template('del_database.html', form=form, database=database, server=server)
+        flash("L'information n'a pas pu être retrouvée.")
+        return redirect(url_for('list_databases', srvr_id=srvr_id))
 
 
 # Application functions
@@ -875,8 +1072,8 @@ def db_validate_user(user_email, password):
 def db_del_user(user_id):
     try:
         user = AppUser.query.get(user_id)
-        for secret in user.secrets:
-            db.session.delete(secret)
+        for note in user.notes:
+            db.session.delete(note)
         db.session.delete(user)
         db.session.commit()
     except Exception as e:
@@ -885,12 +1082,12 @@ def db_del_user(user_id):
     return True
 
 
-# DB functions for Secret: exists, by_id, add, upd, del, others
-def db_secret_exists(user_id, secret_name):
-    app.logger.debug('Entering secret_exists with: ' + secret_name)
+# DB functions for Note: exists, by_id, add, upd, del, others
+def db_note_exists(user_id, note_name):
+    app.logger.debug('Entering note_exists with: ' + note_name)
     try:
-        secret = Secret.query.filter_by(user_id=user_id, secret_name=secret_name).first()
-        if secret is None:
+        note = Note.query.filter_by(user_id=user_id, note_name=note_name).first()
+        if note is None:
             return False
         else:
             return True
@@ -899,24 +1096,24 @@ def db_secret_exists(user_id, secret_name):
         return False
 
 
-def db_secret_by_id(user_id, secret_id):
+def db_note_by_id(user_id, note_id):
     try:
-        secret = Secret.query.filter_by(secret_id=secret_id, user_id=user_id).first()
-        if secret:
-            secret.secret_text = decrypt_message(secret.secret_text)
+        note = Note.query.filter_by(note_id=note_id, user_id=user_id).first()
+        if note:
+            note.note_text = decrypt_message(note.note_text)
         else:
             return None
-        return secret
+        return note
     except Exception as e:
         app.logger.error('Error: ' + str(e))
         return None
 
 
-def db_add_secret(user_id, secret_name, secret_text):
-    secret_text = encrypt_message(secret_text)
-    secret = Secret(user_id, secret_name, secret_text)
+def db_add_note(user_id, note_name, note_text):
+    note_text = encrypt_message(note_text)
+    note = Note(user_id, note_name, note_text)
     try:
-        db.session.add(secret)
+        db.session.add(note)
         db.session.commit()
     except Exception as e:
         app.logger.error('Error: ' + str(e))
@@ -924,11 +1121,11 @@ def db_add_secret(user_id, secret_name, secret_text):
     return True
 
 
-def db_upd_secret(secret_id, secret_name, secret_text):
+def db_upd_note(note_id, note_name, note_text):
     try:
-        secret = Secret.query.get(secret_id)
-        secret.secret_name = secret_name
-        secret.secret_text = encrypt_message(secret_text)
+        note = Note.query.get(note_id)
+        note.note_name = note_name
+        note.note_text = encrypt_message(note_text)
         db.session.commit()
     except Exception as e:
         app.logger.error('Error: ' + str(e))
@@ -936,10 +1133,10 @@ def db_upd_secret(secret_id, secret_name, secret_text):
     return True
 
 
-def db_del_secret(secret_id):
+def db_del_note(note_id):
     try:
-        secret = Secret.query.get(secret_id)
-        db.session.delete(secret)
+        note = Note.query.get(note_id)
+        db.session.delete(note)
         db.session.commit()
     except Exception as e:
         app.logger.error('Error: ' + str(e))
@@ -973,8 +1170,8 @@ def db_server_by_id(user_id, srvr_id):
         return None
 
 
-def db_add_server(user_id, srvr_name, srvr_fqn, srvr_desc):
-    server = Server(user_id, srvr_name, srvr_fqn, srvr_desc)
+def db_add_server(user_id, srvr_name, srvr_fqn, srvr_desc, srvr_ipaddr):
+    server = Server(user_id, srvr_name, srvr_fqn, srvr_desc, srvr_ipaddr)
     try:
         db.session.add(server)
         db.session.commit()
@@ -984,12 +1181,13 @@ def db_add_server(user_id, srvr_name, srvr_fqn, srvr_desc):
     return True
 
 
-def db_upd_server(srvr_id, srvr_name, srvr_fqn, srvr_desc):
+def db_upd_server(srvr_id, srvr_name, srvr_fqn, srvr_desc, srvr_ipaddr):
     try:
         server = Server.query.get(srvr_id)
         server.srvr_name = srvr_name
         server.srvr_fqn = srvr_fqn
         server.srvr_desc = srvr_desc
+        server.srvr_ipaddr = srvr_ipaddr
         db.session.commit()
     except Exception as e:
         app.logger.error('Error: ' + str(e))
@@ -1066,6 +1264,68 @@ def db_del_srvr_acct(srvr_acct_id):
     try:
         srvr_acct = ServerAccount.query.get(srvr_acct_id)
         db.session.delete(srvr_acct)
+        db.session.commit()
+    except Exception as e:
+        app.logger.error('Error: ' + str(e))
+        return False
+    return True
+
+
+# DB functions for ServerAccount: exists, by_id, add, upd, del, others
+def db_database_exists(srvr_id, db_name):
+    app.logger.debug('Entering database_exists with: ' + db_name)
+    try:
+        database = Database.query.filter_by(srvr_id=srvr_id, db_name=db_name).first()
+        if database is None:
+            return False
+        else:
+            return True
+    except Exception as e:
+        app.logger.error('Error: ' + str(e))
+        return False
+
+
+def db_database_by_id(db_id):
+    try:
+        database = Database.query.filter_by(db_id=db_id).first()
+        if database:
+            return database
+        else:
+            return None
+    except Exception as e:
+        app.logger.error('Error: ' + str(e))
+        return None
+
+
+def db_add_database(srvr_id, db_name, db_desc, db_port, dbms):
+    database = Database(srvr_id, db_name, db_desc, db_port, dbms)
+    try:
+        db.session.add(database)
+        db.session.commit()
+    except Exception as e:
+        app.logger.error('Error: ' + str(e))
+        return False
+    return True
+
+
+def db_upd_database(db_id, db_name, db_desc, db_port, dbms):
+    try:
+        database = Database.query.get(db_id)
+        database.db_name = db_name
+        database.db_desc = db_desc
+        database.db_port = db_port
+        database.dbms = dbms
+        db.session.commit()
+    except Exception as e:
+        app.logger.error('Error: ' + str(e))
+        return False
+    return True
+
+
+def db_del_database(db_id):
+    try:
+        database = Database.query.get(db_id)
+        db.session.delete(database)
         db.session.commit()
     except Exception as e:
         app.logger.error('Error: ' + str(e))

@@ -5,7 +5,7 @@
         <h1>Listes des Notes</h1>
     </div>
     <p>
-        {% if secrets %}
+        {% if notes %}
         <table class="table table-bordered">
             <thead>
                 <tr>
@@ -15,18 +15,18 @@
                 </tr>
             </thead>
             <tbody>
-                {% for secret in secrets %}
+                {% for note in notes %}
                     <tr>
-                        <td><a href="{{ url_for('show_secret', secret_id=secret['secret_id']) }}">
-                            {{ secret['secret_name'] }}</a></td>
+                        <td><a href="{{ url_for('show_note', note_id=note['note_id']) }}">
+                            {{ note['note_name'] }}</a></td>
                         <td class="text-center">
-                            <a href="{{ url_for('upd_secret', secret_id=secret['secret_id']) }}"
+                            <a href="{{ url_for('upd_note', note_id=note['note_id']) }}"
                                class="btn btn-primary btn-xs" data-title="Modifier">
                                <span class="glyphicon glyphicon-pencil"></span>
                             </a>
                         </td>
                         <td class="text-center">
-                            <a href="{{ url_for('del_secret', secret_id=secret['secret_id']) }}"
+                            <a href="{{ url_for('del_note', note_id=note['note_id']) }}"
                                class="btn btn-danger btn-xs" data-title="Supprimer">
                                <span class="glyphicon glyphicon-trash"></span>
                             </a>
@@ -40,7 +40,7 @@
         {% endif %}
     </p>
     <p>
-        <a href="{{ url_for('add_secret') }}" class="btn btn-default">Ajouter une note</a>
+        <a href="{{ url_for('add_note') }}" class="btn btn-default">Ajouter une note</a>
         <a href="{{ url_for('index') }}" class="btn btn-default">Retour</a>
     </p>
 </div>

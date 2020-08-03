@@ -12,6 +12,7 @@
                     <th>Non du serveur</th>
                     <th class="text-center">Modifier</th>
                     <th class="text-center">Supprimer</th>
+                    <th class="text-center">Bases de Données</th>
                     <th class="text-center">Comptes</th>
                 </tr>
             </thead>
@@ -30,6 +31,12 @@
                             <a href="{{ url_for('del_server', srvr_id=server['srvr_id']) }}"
                                class="btn btn-danger btn-xs" data-title="Supprimer">
                                <span class="glyphicon glyphicon-trash"></span>
+                            </a>
+                        </td>
+                        <td class="text-center">
+                            <a href="{{ url_for('list_databases', srvr_id=server['srvr_id']) }}"
+                               class="btn btn-warning btn-xs" data-title="Comptes">
+                               <span class="glyphicon glyphicon-list"></span>
                             </a>
                         </td>
                         <td class="text-center">

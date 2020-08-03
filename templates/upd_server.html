@@ -33,6 +33,9 @@
         <div class="form-group ">
             {{ render_field(form.srvr_desc, class="form-control") }}
         </div>
+        <div class="form-group ">
+            {{ render_field(form.srvr_ipaddr, class="form-control") }}
+        </div>
         <input class="btn btn-default" id="submit" name="submit" type="submit" value="Modifier">
         <a href="{{ url_for('list_servers') }}" class="btn btn-default">Annuler</a>
     </form>

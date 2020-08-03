@@ -2,7 +2,7 @@
 {% block page_content %}
 <div class="container">
     <div class="page-header">
-        <h1>Note: {{ secret.secret_name }}</h1>
+        <h1>Note: {{ note.note_name }}</h1>
     </div>
 
     <div class = "panel panel-primary">
@@ -11,11 +11,11 @@
         </div>
 
         <div class = "panel-body">
-            {{ secret.secret_text }}
+            {{ note.note_text }}
         </div>
     </div>
 
-    <p><a href="{{ url_for('list_secrets') }}" class="btn btn-default">Retour à la liste</a></p>
+    <p><a href="{{ url_for('list_notes') }}" class="btn btn-default">Retour à la liste</a></p>
     <p>&nbsp</p>
 </div>
 {% endblock %}

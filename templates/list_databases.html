@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block page_content %}
+<div class="container">
+    <div class="page-header">
+        <h1>Listes des Bases de Données sur le Serveur: {{ server.srvr_name }}</h1>
+    </div>
+    <p>
+        {% if databases %}
+        <table class="table table-bordered">
+            <thead>
+                <tr>
+                    <th>Non de BD</th>
+                    <th class="text-center">Modifier</th>
+                    <th class="text-center">Supprimer</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for database in databases %}
+                    <tr>
+                        <td>
+                            <a href="{{ url_for('show_database', db_id=database['db_id']) }}">
+                               {{ database.db_name }}
+                            </a>
+                        </td>
+                        <td class="text-center">
+                            <a href="{{ url_for('upd_database', db_id=database['db_id']) }}"
+                               class="btn btn-primary btn-xs" data-title="Modifier">
+                               <span class="glyphicon glyphicon-pencil"></span>
+                            </a>
+                        </td>
+                        <td class="text-center">
+                            <a href="{{ url_for('del_database', db_id=database['db_id']) }}"
+                               class="btn btn-danger btn-xs" data-title="Supprimer">
+                               <span class="glyphicon glyphicon-trash"></span>
+                            </a>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+            <em>Il n'y a pas de base de données pour ce serveur dans la base de données</em>
+        {% endif %}
+    </p>
+    <p>
+        <a href="{{ url_for('add_database') }}" class="btn btn-default">Ajouter une base de données</a>
+        <a href="{{ url_for('index') }}" class="btn btn-default">Retour</a>
+    </p>
+</div>
+{% endblock %}
