@@ -2,10 +2,10 @@
 {% block page_content %}
 <div class="container">
     <div class="page-header">
-        <h1>Listes des Comptes sur le Serveur: {{ server.srvr_name }}</h1>
+        <h1>Listes des Comptes sur la BD: {{ database.db_name }}</h1>
     </div>
     <p>
-        {% if srvr_accts %}
+        {% if db_accts %}
         <table class="table table-bordered">
             <thead>
                 <tr>
@@ -15,21 +15,21 @@
                 </tr>
             </thead>
             <tbody>
-                {% for acct in srvr_accts %}
+                {% for acct in db_accts %}
                     <tr>
                         <td>
-                            <a href="{{ url_for('show_srvr_acct', srvr_acct_id=acct['srvr_acct_id']) }}">
+                            <a href="{{ url_for('show_db_acct', db_acct_id=acct['db_acct_id']) }}">
                                {{ acct.account_name }}
                             </a>
                         </td>
                         <td class="text-center">
-                            <a href="{{ url_for('upd_srvr_acct', srvr_acct_id=acct['srvr_acct_id']) }}"
+                            <a href="{{ url_for('upd_db_acct', db_acct_id=acct['db_acct_id']) }}"
                                class="btn btn-primary btn-xs" data-title="Modifier">
                                <span class="glyphicon glyphicon-pencil"></span>
                             </a>
                         </td>
                         <td class="text-center">
-                            <a href="{{ url_for('del_srvr_acct', srvr_acct_id=acct['srvr_acct_id']) }}"
+                            <a href="{{ url_for('del_db_acct', db_acct_id=acct['db_acct_id']) }}"
                                class="btn btn-danger btn-xs" data-title="Supprimer">
                                <span class="glyphicon glyphicon-trash"></span>
                             </a>
@@ -39,12 +39,12 @@
             </tbody>
         </table>
         {% else %}
-            <em>Il n'y a pas de compte pour ce serveur dans la base de données</em>
+            <em>Il n'y a pas de compte pour cette base de données</em>
         {% endif %}
     </p>
     <p>
-        <a href="{{ url_for('add_srvr_acct') }}" class="btn btn-default">Ajouter un compte</a>
-        <a href="{{ url_for('list_servers') }}" class="btn btn-default">Retour</a>
+        <a href="{{ url_for('add_db_acct') }}" class="btn btn-default">Ajouter un compte</a>
+        <a href="{{ url_for('list_databases',srvr_id=database.srvr_id) }}" class="btn btn-default">Retour</a>
     </p>
 </div>
 {% endblock %}

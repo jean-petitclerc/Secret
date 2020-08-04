@@ -2,7 +2,7 @@
 {% block page_content %}
 <div class="container">
     <div class="page-header">
-        <h1>Compte: {{ srvr_acct.account_name }}</h1>
+        <h1>Compte: {{ db_acct.account_name }}</h1>
     </div>
 
     <div class = "panel panel-primary">
@@ -10,21 +10,21 @@
             <h2 class = "panel-title">Mot de Passe</h2>
         </div>
         <div class = "panel-body">
-            {{ srvr_acct.account_pass }}
+            {{ db_acct.account_pass }}
         </div>
     </div>
-    {% if srvr_acct.account_desc %}
+    {% if db_acct.account_desc %}
     <div class = "panel panel-primary">
         <div class = "panel-heading">
             <h2 class = "panel-title">Description</h2>
         </div>
         <div class = "panel-body">
-            {{ srvr_acct.account_desc }}
+            {{ db_acct.account_desc }}
         </div>
     </div>
     {% endif %}
 
-    <p><a href="{{ url_for('list_srvr_accts', srvr_id=server.srvr_id) }}" class="btn btn-default">Retour à la liste</a></p>
+    <p><a href="{{ url_for('list_db_accts', db_id=database.db_id) }}" class="btn btn-default">Retour à la liste</a></p>
     <p>&nbsp</p>
 </div>
 {% endblock %}

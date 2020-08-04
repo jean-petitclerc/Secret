@@ -14,13 +14,13 @@
             <em>Voulez-vous vraiment supprimer ce compte?</em>
             <br>
             <br>
-            Serveur: {{ server.srvr_name }}
+            Base de données: {{ database.db_name }}
             <br>
-            Compte: {{ srvr_acct.account_name }}
+            Compte: {{ db_acct.account_name }}
         </h4>
         <p>&nbsp;</p>
         <input class="btn btn-default" id="submit" name="submit" type="submit" value="Supprimer">
-        <a href="{{ url_for('list_srvr_accts', srvr_id=server.srvr_id) }}" class="btn btn-default">Annuler</a>
+        <a href="{{ url_for('list_db_accts', db_id=database.db_id) }}" class="btn btn-default">Annuler</a>
     </form>
 </div>
 {% endblock %}

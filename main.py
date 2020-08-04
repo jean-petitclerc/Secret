@@ -37,9 +37,9 @@ app.config.from_object(Config)
 manager = Manager(app)
 bootstrap = Bootstrap(app)
 db = SQLAlchemy(app)
-dbms_choices = [('D', 'DB2 Unix'), ('L', 'SQLite'), ('M', 'MySQL'), ('O', 'Oracle'), ('P', 'Postgress'),
+dbms_choices = [('D', 'DB2 Unix'), ('L', 'SQLite'), ('M', 'MySQL'), ('O', 'Oracle'), ('P', 'PostgreSQL'),
                 ('S', 'MS-SQL Server')]
-dbms  = {'D': 'DB2 Unix', 'L': 'SQLite', 'M': 'MySQL', 'O': 'Oracle', 'P': 'Postgress', 'S': 'MS-SQL Server'}
+dbms  = {'D': 'DB2 Unix', 'L': 'SQLite', 'M': 'MySQL', 'O': 'Oracle', 'P': 'PostgreSQL', 'S': 'MS-SQL Server'}
 
 # Database Model
 # ----------------------------------------------------------------------------------------------------------------------
@@ -135,6 +135,7 @@ class Database(db.Model):
     db_desc = db.Column(db.Text(), nullable=True)
     db_port = db.Column(db.Integer(), nullable=False)
     dbms = db.Column(db.String(8), nullable=False)
+    db_accounts = db.relationship('DbAccount', backref='tdatabase', lazy='dynamic')
 
     def __init__(self, srvr_id, db_name, db_desc, db_port, dbms):
         self.srvr_id = srvr_id
@@ -150,7 +151,7 @@ class Database(db.Model):
 class DbAccount(db.Model):
     __tablename__ = 'tdb_account'
     db_acct_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    db_id = db.Column(db.Integer, db.ForeignKey('tserver.srvr_id'))
+    db_id = db.Column(db.Integer, db.ForeignKey('tdatabase.db_id'))
     account_name = db.Column(db.String(32), nullable=False)
     account_pass = db.Column(db.Text(), nullable=False, default='')
     account_desc = db.Column(db.Text(), nullable=True)
@@ -262,6 +263,22 @@ class UpdDatabaseForm(FlaskForm):
     dbms = SelectField("Type de SGBD: ", choices=dbms_choices,
                             validators=[DataRequired(message="Le type de SGBD doit être choisi.")],
                             default=0, widget=Select())
+    submit = SubmitField('Modifier')
+
+
+# Formulaires pour ajouter un compte sur BD
+class AddDbAcctForm(FlaskForm):
+    account_name = StringField('Nom du compte', validators=[DataRequired(message='Le nom est requis.')])
+    account_pass = StringField('Mot de passe', [DataRequired(message='Le mot de passe est obligatoire.')])
+    account_desc = TextAreaField('Description')
+    submit = SubmitField('Ajouter')
+
+
+# Formulaire de la mise à jour d'un compte sur BD
+class UpdDbAcctForm(FlaskForm):
+    account_name = StringField('Nom du compte', validators=[DataRequired(message='Le nom est requis.')])
+    account_pass = StringField('Mot de passe', [DataRequired(message='Le mot de passe est obligatoire.')])
+    account_desc = TextAreaField('Description')
     submit = SubmitField('Modifier')
 
 
@@ -921,6 +938,143 @@ def del_database(db_id):
         return redirect(url_for('list_databases', srvr_id=srvr_id))
 
 
+@app.route('/list_db_accts/<int:db_id>')
+def list_db_accts(db_id):
+    if not logged_in():
+        return redirect(url_for('login'))
+    try:
+        user_id = session.get('user_id')
+        srvr_id = session.get('srvr_id')
+        database = db_database_by_id(db_id)
+        if database:
+            server = db_server_by_id(user_id, database.srvr_id)
+            if server:
+                session['db_id']=db_id
+                db_accts = DbAccount.query.filter_by(db_id=db_id).order_by(DbAccount.account_name).all()
+                return render_template('list_db_accts.html', database=database, db_accts=db_accts)
+        flash("L'information n'a pas pu être retrouvée.")
+        return redirect(url_for('list_databases', srvr_id=srvr_id))
+    except Exception as e:
+        flash("Quelque chose n'a pas fonctionné.")
+        app.logger.error('Error: ' + str(e))
+        abort(500)
+
+
+@app.route('/show_db_acct/<int:db_acct_id>')
+def show_db_acct(db_acct_id):
+    if not logged_in():
+        return redirect(url_for('login'))
+    try:
+        user_id = session.get('user_id')
+        srvr_id = session.get('srvr_id')
+        db_acct = db_db_acct_by_id(db_acct_id)
+        if db_acct:
+            database = db_database_by_id(db_acct.db_id)
+            if database:
+                server = db_server_by_id(user_id, srvr_id)
+                if server:
+                    return render_template("show_db_acct.html", db_acct=db_acct, database=database)
+        flash("L'information n'a pas pu être retrouvée.")
+        return redirect(url_for('list_db_acct', db_id=database.db_id))
+    except Exception as e:
+        flash("Quelque chose n'a pas fonctionné.")
+        app.logger.error('Error: ' + str(e))
+        abort(500)
+
+
+@app.route('/add_db_acct', methods=['GET', 'POST'])
+def add_db_acct():
+    if not logged_in():
+        return redirect(url_for('login'))
+    db_id = session.get('db_id')
+    app.logger.debug('Entering add_db_acct')
+    form = AddDbAcctForm()
+    if form.validate_on_submit():
+        app.logger.debug('Inserting a new db account')
+        account_name = request.form['account_name']
+        account_pass = request.form['account_pass']
+        account_desc = request.form['account_desc']
+        if db_db_acct_exists(db_id, account_name):
+            flash('Ce nom de compte existe déjà sur la BD. Veuillez en choisir un autre.')
+            return render_template('add_db_acct.html', form=form, db_id=db_id)
+        else:
+            if db_add_db_acct(db_id, account_name, account_pass, account_desc):
+                flash('Le nouveau compte est ajouté.')
+                return redirect(url_for('list_db_accts', db_id=db_id))
+            else:
+                flash('Une erreur de base de données est survenue.')
+                abort(500)
+    return render_template('add_db_acct.html', form=form, db_id=db_id)
+
+
+@app.route('/upd_db_acct/<int:db_acct_id>', methods=['GET', 'POST'])
+def upd_db_acct(db_acct_id):
+    if not logged_in():
+        return redirect(url_for('login'))
+    user_id = session.get('user_id')
+    db_id = session.get('db_id')
+    db_acct = db_db_acct_by_id(db_acct_id)
+    if db_acct is None:
+        flash("L'information n'a pas pu être retrouvée.")
+        return redirect(url_for('list_db_accts', db_id=db_id))
+    # Get the parent server to validate that the server account belongs to the user
+    database = db_database_by_id(db_acct.db_id)
+    if database:
+        server = db_server_by_id(user_id, database.srvr_id)
+        if server is None:
+            flash("L'information n'a pas pu être retrouvée.")
+            return redirect(url_for('list_db_accts', db_id=db_id))
+    else:
+        flash("L'information n'a pas pu être retrouvée.")
+        return redirect(url_for('list_db_accts', db_id=db_id))
+    form = UpdSrvrAcctForm()
+    if form.validate_on_submit():
+        app.logger.debug('Updating a db account')
+        save_account_name = db_acct.account_name
+        account_name = form.account_name.data
+        account_desc = form.account_desc.data
+        account_pass = form.account_pass.data
+        if (account_name != save_account_name) and db_db_acct_exists(db_id, account_name):
+            flash('Ce nom de compte existe déjà. Veuillez en choisir un autre.')
+            return render_template("upd_db_acct.html", form=form, database=database)
+        if db_upd_db_acct(db_acct_id, account_name, account_pass, account_desc):
+            flash("Le compte a été modifié.")
+        else:
+            flash("Quelque chose n'a pas fonctionné.")
+        return redirect(url_for('list_db_accts', db_id=db_id))
+    else:
+        form.account_name.data = db_acct.account_name
+        form.account_pass.data = db_acct.account_pass
+        form.account_desc.data = db_acct.account_desc
+        return render_template("upd_db_acct.html", form=form, database=database)
+
+
+@app.route('/del_db_acct/<int:db_acct_id>', methods=['GET', 'POST'])
+def del_db_acct(db_acct_id):
+    if not logged_in():
+        return redirect(url_for('login'))
+    user_id = session.get('user_id')
+    db_id = session.get('db_id')
+    form = DelEntityForm()
+    if form.validate_on_submit():
+        app.logger.debug('Deleting a db_account')
+        if db_del_db_acct(db_acct_id):
+            flash("Le compte a été effacé.")
+        else:
+            flash("Quelque chose n'a pas fonctionné.")
+        return redirect(url_for('list_db_accts', db_id=db_id))
+    else:
+        db_acct = db_db_acct_by_id(db_acct_id)
+        if db_acct:
+            database = db_database_by_id(db_acct.db_id)
+            if database:
+                server = db_server_by_id(user_id, database.srvr_id)
+                if server:
+                    return render_template('del_db_acct.html', form=form, db_acct=db_acct, database=database)
+        flash("L'information n'a pas pu être retrouvée.")
+        return redirect(url_for('list_db_accts', db_id=db_id))
+
+
 # Application functions
 # ----------------------------------------------------------------------------------------------------------------------
 def logged_in():
@@ -1326,6 +1480,69 @@ def db_del_database(db_id):
     try:
         database = Database.query.get(db_id)
         db.session.delete(database)
+        db.session.commit()
+    except Exception as e:
+        app.logger.error('Error: ' + str(e))
+        return False
+    return True
+
+
+# DB functions for ServerAccount: exists, by_id, add, upd, del, others
+def db_db_acct_exists(db_id, account_name):
+    app.logger.debug('Entering db_acct_exists with: ' + account_name)
+    try:
+        db_acct = DbAccount.query.filter_by(db_id=db_id, account_name=account_name).first()
+        if db_acct is None:
+            return False
+        else:
+            return True
+    except Exception as e:
+        app.logger.error('Error: ' + str(e))
+        return False
+
+
+def db_db_acct_by_id(db_acct_id):
+    try:
+        db_acct = DbAccount.query.filter_by(db_acct_id=db_acct_id).first()
+        if db_acct:
+            db_acct.account_pass = decrypt_message(db_acct.account_pass)
+            return db_acct
+        else:
+            return None
+    except Exception as e:
+        app.logger.error('Error: ' + str(e))
+        return None
+
+
+def db_add_db_acct(db_id, account_name, account_pass, account_desc):
+    account_pass = encrypt_message(account_pass)
+    db_acct = DbAccount(db_id, account_name, account_pass, account_desc)
+    try:
+        db.session.add(db_acct)
+        db.session.commit()
+    except Exception as e:
+        app.logger.error('Error: ' + str(e))
+        return False
+    return True
+
+
+def db_upd_db_acct(db_acct_id, account_name, account_pass, account_desc):
+    try:
+        db_acct = DbAccount.query.get(db_acct_id)
+        db_acct.account_name = account_name
+        db_acct.account_pass = encrypt_message(account_pass)
+        db_acct.account_desc = account_desc
+        db.session.commit()
+    except Exception as e:
+        app.logger.error('Error: ' + str(e))
+        return False
+    return True
+
+
+def db_del_db_acct(db_acct_id):
+    try:
+        db_acct = DbAccount.query.get(db_acct_id)
+        db.session.delete(db_acct)
         db.session.commit()
     except Exception as e:
         app.logger.error('Error: ' + str(e))
