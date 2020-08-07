@@ -677,6 +677,12 @@ def del_server(srvr_id):
     else:
         server = db_server_by_id(user_id, srvr_id)
         if server:
+            nbr_db = 0
+            for database in server.databases:
+                nbr_db+=1
+            if nbr_db > 0:
+                flash("Tant que le serveur contient des bases de données il ne peut pas être effacé.")
+                return redirect(url_for('list_servers'))
             return render_template('del_server.html', form=form, server=server)
         else:
             flash("L'information n'a pas pu être retrouvée.")
@@ -1479,6 +1485,8 @@ def db_upd_database(db_id, db_name, db_desc, db_port, dbms):
 def db_del_database(db_id):
     try:
         database = Database.query.get(db_id)
+        for db_acct in database.db_accounts:
+            db.session.delete(db_acct)
         db.session.delete(database)
         db.session.commit()
     except Exception as e:
